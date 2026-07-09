@@ -61,13 +61,24 @@ function buildInfographic(result: DriveUploadResult | null): string {
 }
 
 function buildOutputList(data: LandingPageData): string {
+  const wordHtml = data.summaryMarkdown
+    ? (() => {
+        const sections = splitByH2(data.summaryMarkdown);
+        return sections.length
+          ? sections.map((s) => renderMarkdownFragment(s.body)).join("\n")
+          : renderMarkdownFragment(data.summaryMarkdown);
+      })()
+    : "";
+
+  const summaryBtn = data.summaryMarkdown
+    ? `<button class="output-btn ${ACCENT.summary}" onclick="openWordModal(WORD_DOCUMENT_HTML)"><span>📖 말씀 문서 보기</span><span class="open">보기 🔍</span></button>
+<script>
+  var WORD_DOCUMENT_HTML = ${JSON.stringify(wordHtml)};
+</script>`
+    : `<div class="output-btn ${ACCENT.summary} is-empty"><span>📖 말씀 문서 보기</span><span class="open">미생성</span></div>`;
+
   return [
-    accordionButton("summary", "📝 설교문 요약 보기", data.summaryMarkdown, (md) => {
-      const sections = splitByH2(md);
-      return sections.length
-        ? sections.map((s) => renderMarkdownFragment(s.body)).join("\n")
-        : renderMarkdownFragment(md);
-    }),
+    summaryBtn,
     linkButton("slides", "🖥️ 슬라이드 자료", data.slides),
     linkButton("video", "🎬 영상 자료 보기", data.video),
     linkButton("audio", "🎧 음성 자료 듣기", data.audio),
@@ -111,12 +122,14 @@ function emptyState(message: string): string {
   return `<div class="empty-state">${escapeHtml(message)}</div>`;
 }
 
-// 최소 마크다운 -> HTML 변환기: 문단/목록/굵게만 지원한다(랜딩페이지 카드에 필요한 만큼만).
+// 최소 마크다운 -> HTML 변환기: 문단/목록/굵게/인용구/헤더/형광펜을 지원한다.
 function renderMarkdownFragment(markdown: string): string {
   const lines = markdown.split(/\r?\n/);
   const html: string[] = [];
   let listItems: string[] = [];
   let listTag: "ul" | "ol" | null = null;
+  let inBlockquote = false;
+  let blockquoteLines: string[] = [];
 
   const flushList = () => {
     if (!listTag) return;
@@ -125,12 +138,42 @@ function renderMarkdownFragment(markdown: string): string {
     listTag = null;
   };
 
+  const flushBlockquote = () => {
+    if (!inBlockquote) return;
+    html.push(`<blockquote>${blockquoteLines.map((line) => `<p>${renderInline(line)}</p>`).join("")}</blockquote>`);
+    blockquoteLines = [];
+    inBlockquote = false;
+  };
+
   for (const rawLine of lines) {
     const line = rawLine.trim();
+
+    // 블록쿼트 처리
+    if (line.startsWith(">")) {
+      flushList();
+      if (!inBlockquote) {
+        inBlockquote = true;
+      }
+      blockquoteLines.push(line.slice(1).trim());
+      continue;
+    } else {
+      flushBlockquote();
+    }
+
     if (!line) {
       flushList();
       continue;
     }
+
+    // 헤더 처리 (###, ####)
+    const headerMatch = line.match(/^(#{3,4})\s+(.+)$/);
+    if (headerMatch) {
+      flushList();
+      const level = headerMatch[1]!.length; // 3 or 4
+      html.push(`<h${level}>${renderInline(headerMatch[2]!)}</h${level}>`);
+      continue;
+    }
+
     const unordered = line.match(/^[-*]\s+(.+)$/);
     const ordered = line.match(/^\d+\.\s+(.+)$/);
     if (unordered) {
@@ -153,13 +196,15 @@ function renderMarkdownFragment(markdown: string): string {
     html.push(`<p>${renderInline(line)}</p>`);
   }
   flushList();
+  flushBlockquote();
   return html.join("\n");
 }
 
 function renderInline(value: string): string {
   return escapeHtml(value)
     .replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>")
-    .replace(/\*([^*]+)\*/g, "<em>$1</em>");
+    .replace(/\*([^*]+)\*/g, "<em>$1</em>")
+    .replace(/==([^=]+)==/g, "<mark>$1</mark>");
 }
 
 function escapeHtml(value: string): string {
