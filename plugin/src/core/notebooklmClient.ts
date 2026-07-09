@@ -76,7 +76,7 @@ export function createNotebookLmSession(command: string, timeoutMs: number): Mcp
       send("initialize", {
         protocolVersion: "2025-06-18",
         capabilities: {},
-        clientInfo: { name: "sermon-multiplier", version: "0.1.0" },
+        clientInfo: { name: "sermon-multiplier2", version: "0.1.0" },
       })
         .then(() => {
           clearTimeout(timer);

@@ -82,7 +82,7 @@ export default class SermonMultiplierPlugin extends Plugin {
   }
 
   onunload(): void {
-    console.debug("sermon-multiplier unloaded");
+    console.debug("sermon-multiplier2 unloaded");
   }
 
   async loadSettings(): Promise<void> {
