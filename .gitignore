@@ -1,0 +1,24 @@
+# OS generated files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# Obsidian / Plugin specific
+plugin/node_modules/
+plugin/dist/
+plugin/main.js
+plugin/*.js.map
+plugin/data.json
+
+# Sermon Multiplier temporary files
+.sermon-multiplier/tmp/
+.sermon-multiplier/history/
+
+# Local Environment secrets
+.env
+.sermon-multiplier.env
+*.env
