@@ -194,7 +194,7 @@ export const OUTPUT_LABELS: Record<OutputKind, string> = {
   slides: "슬라이드",
   video: "영상자료",
   audio: "음성자료",
-  summary: "말씀 문서 보기",
+  summary: "설교 문서 보기",
   qt: "개인 큐티자료 (2일)",
   bible_study: "성경공부자료",
   landing_page: "통합 랜딩페이지",

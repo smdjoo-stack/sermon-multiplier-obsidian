@@ -1,6 +1,6 @@
 {
   "name": "sermon-multiplier2",
-  "version": "0.1.19",
+  "version": "0.1.20",
   "description": "설교 노트 기반 통합 목회자료 생성 플러그인 (Obsidian plugin + CLI + MCP server)",
   "license": "MIT",
   "type": "module",

@@ -71,11 +71,11 @@ function buildOutputList(data: LandingPageData): string {
     : "";
 
   const summaryBtn = data.summaryMarkdown
-    ? `<button class="output-btn ${ACCENT.summary}" onclick="openWordModal(WORD_DOCUMENT_HTML)"><span>📖 말씀 문서 보기</span><span class="open">보기 🔍</span></button>
+    ? `<button class="output-btn ${ACCENT.summary}" onclick="openWordModal(WORD_DOCUMENT_HTML)"><span>📖 설교 문서 보기</span><span class="open">보기 🔍</span></button>
 <script>
   var WORD_DOCUMENT_HTML = ${JSON.stringify(wordHtml)};
 </script>`
-    : `<div class="output-btn ${ACCENT.summary} is-empty"><span>📖 말씀 문서 보기</span><span class="open">미생성</span></div>`;
+    : `<div class="output-btn ${ACCENT.summary} is-empty"><span>📖 설교 문서 보기</span><span class="open">미생성</span></div>`;
 
   return [
     summaryBtn,
@@ -130,17 +130,24 @@ function renderMarkdownFragment(markdown: string): string {
   let listTag: "ul" | "ol" | null = null;
   let inBlockquote = false;
   let blockquoteLines: string[] = [];
+  let inConclusion = false;
+  let openedBox: "conclusion" | "prayer" | null = null;
 
   const flushList = () => {
     if (!listTag) return;
-    html.push(`<${listTag}>${listItems.map((item) => `<li>${item}</li>`).join("")}</${listTag}>`);
+    if (inConclusion && listTag === "ul") {
+      const checkIcon = `<svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path></svg>`;
+      html.push(`<ul class="conclusion-list">${listItems.map((item) => `<li>${checkIcon}<span>${item}</span></li>`).join("")}</ul>`);
+    } else {
+      html.push(`<${listTag}>${listItems.map((item) => `<li>${item}</li>`).join("")}</${listTag}>`);
+    }
     listItems = [];
     listTag = null;
   };
 
   const flushBlockquote = () => {
     if (!inBlockquote) return;
-    html.push(`<blockquote>${blockquoteLines.map((line) => `<p>${renderInline(line)}</p>`).join("")}</blockquote>`);
+    html.push(`<blockquote>${blockquoteLines.map((line) => `<p>${line}</p>`).join("")}</blockquote>`);
     blockquoteLines = [];
     inBlockquote = false;
   };
@@ -154,7 +161,13 @@ function renderMarkdownFragment(markdown: string): string {
       if (!inBlockquote) {
         inBlockquote = true;
       }
-      blockquoteLines.push(line.slice(1).trim());
+      let quoteLine = line.slice(1).trim();
+      const refMatch = quoteLine.match(/^([\s\S]+?)\s*(\([\w가-힣\s\d:~,.-]+\))$/);
+      if (refMatch) {
+        blockquoteLines.push(`${renderInline(refMatch[1]!)} <span class="ref">${refMatch[2]!}</span>`);
+      } else {
+        blockquoteLines.push(renderInline(quoteLine));
+      }
       continue;
     } else {
       flushBlockquote();
@@ -170,7 +183,41 @@ function renderMarkdownFragment(markdown: string): string {
     if (headerMatch) {
       flushList();
       const level = headerMatch[1]!.length; // 3 or 4
-      html.push(`<h${level}>${renderInline(headerMatch[2]!)}</h${level}>`);
+      let titleContent = headerMatch[2]!.trim();
+      let titleNumberHtml = "";
+
+      if (level === 3) {
+        if (titleContent === "결론") {
+          if (openedBox) html.push("</div>");
+          openedBox = "conclusion";
+          inConclusion = true;
+          html.push('<div class="conclusion-box"><h3>결론</h3>');
+          continue;
+        } else if (titleContent === "기도") {
+          if (openedBox) html.push("</div>");
+          openedBox = "prayer";
+          inConclusion = false;
+          html.push('<div class="prayer-box"><h3>기도</h3>');
+          continue;
+        } else {
+          if (openedBox) {
+            html.push("</div>");
+            openedBox = null;
+          }
+          inConclusion = false;
+          
+          // 대지 번호 분리 추출 (예: "1. 제목")
+          const numberMatch = titleContent.match(/^(\d+\.)\s+(.+)$/);
+          if (numberMatch) {
+            titleNumberHtml = `<span class="number">${numberMatch[1]!}</span> `;
+            titleContent = numberMatch[2]!;
+          }
+        }
+      } else {
+        // level === 4 등 하위 제목인 경우
+      }
+
+      html.push(`<h${level}>${titleNumberHtml}${renderInline(titleContent)}</h${level}>`);
       continue;
     }
 
@@ -197,6 +244,9 @@ function renderMarkdownFragment(markdown: string): string {
   }
   flushList();
   flushBlockquote();
+  if (openedBox) {
+    html.push("</div>");
+  }
   return html.join("\n");
 }
 
@@ -204,7 +254,7 @@ function renderInline(value: string): string {
   return escapeHtml(value)
     .replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>")
     .replace(/\*([^*]+)\*/g, "<em>$1</em>")
-    .replace(/==([^=]+)==/g, "<mark>$1</mark>");
+    .replace(/==([^=]+)==/g, '<span class="highlight">$1</span>');
 }
 
 function escapeHtml(value: string): string {
