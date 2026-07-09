@@ -28,6 +28,7 @@ import {
   getRecommendedSize,
   getSizeById,
   upsertOutputSection,
+  extractOutputSection,
 } from "./embedWriter";
 import { getSlideStylePreset } from "./slideStyles";
 import { writeRunHistory, slugifyNotePath } from "./history";
@@ -102,9 +103,6 @@ export async function runPipeline(ctx: PipelineContext, options: RunPipelineOpti
   const localKinds = options.outputs.filter(
     (kind): kind is "summary" | "qt" | "bible_study" => LOCAL_AI_OUTPUTS.includes(kind),
   );
-  // 로컬 AI 3종(요약/큐티/성경공부)은 서로 독립적인 CLI 호출이라 병렬로 실행한다
-  // (NotebookLM 산출물과 달리 공유 세션 문제가 없다). 파일 쓰기는 산출물별로 다른 파일이라 안전하고,
-  // frontmatter/body 변경만 결과가 모두 모인 뒤 순차적으로 적용해 경쟁 상태를 피한다.
   for (const kind of localKinds) ctx.onProgress?.({ kind, status: "generating" });
   const localOutcomes = await Promise.allSettled(
     localKinds.map(async (kind) => {
@@ -112,18 +110,16 @@ export async function runPipeline(ctx: PipelineContext, options: RunPipelineOpti
       const prompt = renderPrompt(template, frontmatter, originalBody);
       const command = await resolveAiCommand(ctx.settings.aiProvider, ctx.settings.aiCommand);
       const content = await runAiCommand(command, prompt, ctx.settings.aiCliTimeoutSeconds);
-      const fileName = buildLocalOutputFileName(kind, frontmatter);
-      await writeFile(join(noteDirAbs, fileName), `${content.trim()}\n`, "utf8");
-      return fileName;
+      return content.trim();
     }),
   );
   localKinds.forEach((kind, index) => {
     const outcome = localOutcomes[index]!;
     if (outcome.status === "fulfilled") {
-      const fileName = outcome.value;
-      frontmatter = { ...frontmatter, outputs: { ...frontmatter.outputs, [kind]: fileName } };
-      body = upsertOutputSection(body, kind, generateWikilink(fileName.replace(/\.md$/, "")));
-      emit({ kind, status: "complete", link: fileName });
+      const content = outcome.value;
+      frontmatter = { ...frontmatter, outputs: { ...frontmatter.outputs, [kind]: "embedded" } };
+      body = upsertOutputSection(body, kind, content);
+      emit({ kind, status: "complete", link: "embedded" });
     } else {
       emit({ kind, status: "error", message: describeError(outcome.reason) });
     }
@@ -270,9 +266,15 @@ export async function generateLandingPage(ctx: Pick<PipelineContext, "vaultPath"
     slides: toDriveResult(frontmatter.outputs.slides),
     video: toDriveResult(frontmatter.outputs.video),
     audio: toDriveResult(frontmatter.outputs.audio),
-    summaryMarkdown: await readLocalOutput(noteDirAbs, frontmatter.outputs.summary),
-    qtMarkdown: await readLocalOutput(noteDirAbs, frontmatter.outputs.qt),
-    bibleStudyMarkdown: await readLocalOutput(noteDirAbs, frontmatter.outputs.bible_study),
+    summaryMarkdown: frontmatter.outputs.summary === "embedded"
+      ? extractOutputSection(body, "summary")
+      : await readLocalOutput(noteDirAbs, frontmatter.outputs.summary),
+    qtMarkdown: frontmatter.outputs.qt === "embedded"
+      ? extractOutputSection(body, "qt")
+      : await readLocalOutput(noteDirAbs, frontmatter.outputs.qt),
+    bibleStudyMarkdown: frontmatter.outputs.bible_study === "embedded"
+      ? extractOutputSection(body, "bible_study")
+      : await readLocalOutput(noteDirAbs, frontmatter.outputs.bible_study),
   };
 
   const html = buildLandingPage(LANDING_PAGE_TEMPLATE, data);

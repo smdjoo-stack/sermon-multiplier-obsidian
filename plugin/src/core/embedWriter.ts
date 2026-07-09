@@ -107,3 +107,25 @@ function upsertSubsection(sectionBody: string, subheading: string, markup: strin
 function escapeRegExp(value: string): string {
   return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
+
+export function extractOutputSection(body: string, kind: OutputKind): string | null {
+  const label = OUTPUT_LABELS[kind];
+  const subheading = `### ${label}`;
+  const sectionRange = findSectionRange(body, SECTION_HEADING);
+  if (!sectionRange) return null;
+
+  const sectionBody = body.slice(sectionRange.start, sectionRange.end);
+  
+  // 1단계: 다음 하위 섹션(###) 직전까지 게으르게 캡처 시도
+  const patternWithNext = new RegExp(`(?:^|\\n)${escapeRegExp(subheading)}\\n\\n([\\s\\S]*?)(?=\\n### )`);
+  let match = patternWithNext.exec(sectionBody);
+
+  // 2단계: 다음 하위 섹션이 없는 경우, 끝까지 캡처
+  if (!match) {
+    const patternToEnd = new RegExp(`(?:^|\\n)${escapeRegExp(subheading)}\\n\\n([\\s\\S]*)$`);
+    match = patternToEnd.exec(sectionBody);
+  }
+
+  if (!match) return null;
+  return match[1]!.trim();
+}
